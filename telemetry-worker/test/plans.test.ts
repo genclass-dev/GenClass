@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PLANS_JSON from "../../billing/plans.json";
 import SEATS_JSON from "./fixtures/plans-v3-seats.json";
+import { featureRows, LIMIT_LINE } from "../src/billing-pages.js";
 import { resetTokenCache } from "../src/dashboard.js";
 import { resetOwnerCache } from "../src/paid.js";
 import { accessOf, accountProjectsAccess, byAgreement, cleanSeats, firstPaidWith, firstPlanWith, FREE, GRANT_PLAN, hasAsk, hasProblems, ownedPrice, PAID_PLANS, PLANS, planByLookupKey, planForPrice, priceText, problemsLock, RETIRED_PLAN_IDS, seatsOf, viewRanges, type Plan } from "../src/plans.js";
@@ -13,6 +14,7 @@ import {
   fakeStripe,
   GENCLASS_PORTAL,
   invoice,
+  now,
   price,
   resetClock,
   sendBatch,
@@ -528,20 +530,24 @@ describe("Pro (id team) and Business are the plans sold on the site, each flat f
       const live = "STRIPE_SECRET_KEY" in keys;
       expect(page).toContain(live ? "You are on the <b>Free</b> plan.</p>" : "You are on the <b>Free</b> plan. Paid plans are not on sale yet.</p>");
       expect(page).toContain("grid-template-columns:repeat(4,minmax(0,1fr))");
-      expect(page).toContain('<p class="price">$25 / month</p>');
-      expect(page).toContain('<p class="price">$79 / month</p>');
-      expect(page).toMatch(/<li(?: class="folded")?>Your whole team, no seat limit<\/li>/); // folded behind "N more" on a phone only
-      expect(page).toContain("<li>Up to 10 apps</li>");
-      expect(page).toContain("<li>Any number of apps</li>");
-      expect(page.match(/<li>Your own classifier/g)).toHaveLength(1);
+      expect(page).toContain("$25<small> a month</small>");
+      expect(page).toContain("$79<small> a month</small>");
+      // one table: the limits from plans.json as rows (Free is the account's plan, so its column is marked), then a row per feature
+      expect(page).toContain('<tr><th scope="row">Apps</th><td class="cur">1</td><td>3</td><td>10</td><td>Any number</td></tr>');
+      expect(page).toContain('<tr><th scope="row">People</th><td class="cur">Just you</td><td>Just you</td><td>Your whole team</td><td>Your whole team</td></tr>');
+      expect(page).toContain('<tr><th scope="row">History kept</th><td class="cur">7 days</td><td>90 days</td><td>180 days</td><td>1 year</td></tr>');
+      expect(page.match(/<th scope="row">Your own classifier/g)).toHaveLength(1);
       // nothing is priced per developer, and no plan asks how many
       expect(visible(page)).not.toMatch(/per developer|\/ developer/);
       expect(page).not.toMatch(/<input[^>]*data-seats/);
       expect(page).not.toContain('id="seats-');
       // bought for the account here (no project to choose first)
       if (live) {
-        expect(page).toContain('data-plan="team"><span>Upgrade to Pro</span>');
-        expect(page).toContain('data-plan="business"><span>Upgrade to Business</span>');
+        // a new account still has its trial: the buttons say so, and the line under each says what follows
+        expect(page).toContain('data-plan="team" aria-label="Start Pro with 7 days free"><span>Start 7 days free</span>');
+        expect(page).toContain('data-plan="business" aria-label="Start Business with 7 days free"><span>Start 7 days free</span>');
+        expect(page).toContain("Then $25 a month. Cancel any time before and you pay nothing.");
+        expect(page).toContain("Pro and Business start with 7 days free. US dollars, billed monthly");
       } else {
         expect(page).not.toContain("data-plan=");
       }
@@ -550,9 +556,44 @@ describe("Pro (id team) and Business are the plans sold on the site, each flat f
       // Free is one person: the team comes with Business, the plan with no seat limit
       expect(page).toContain("The Free plan is for one person. Your team comes with Business: members open the dashboards of your apps with their own sign-in.");
       expect(page).toContain('<a class="btn ghost" href="https://genclass.dev/enterprise#contact"><span>Contact sales</span></a>');
-      expect(page).toContain('<p class="price">By agreement</p>');
+      expect(page).toContain('<div class="cmp-pr words">By agreement</div>');
       expect(visible(page)).not.toMatch(/—|!/);
     }
+  });
+
+  it("the billing page: what the account has used against its plan's limits, and every line of plans.json in the plans table", async () => {
+    const t = setup(LIVE);
+    const a = await signedIn(t.env);
+    // a new account with no app yet sees all four tiles: nothing fixed yet, against Free's 100 a month per app
+    const fresh = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
+    expect(fresh).toContain('<p class="ut-v">0<span class="of"> / 1</span></p>');
+    expect(fresh).toContain('<p class="ut-v">0<span class="of"> / 100</span></p><progress class="ut-bar" max="100" value="0" aria-label="Live fixes this month: 0 of 100"></progress>');
+    expect(fresh.match(/<div class="ut">/g)).toHaveLength(4);
+    const app = await createApp(t.env, a.cookie, "Shop");
+    const day = now().toISOString().slice(0, 10);
+    // this month's live fixes are the dashboard's own counters: applied interventions and applied visual fixes
+    t.sql.db.prepare("INSERT INTO daily (token, day, metric, key, count) VALUES (?, ?, 'intervention', 'coalesce', 30)").run(app.token, day);
+    t.sql.db.prepare("INSERT INTO daily (token, day, metric, key, count) VALUES (?, ?, 'check_fix', 'applied', 7)").run(app.token, day);
+    t.sql.db.prepare("INSERT INTO suggest_usage (account_id, day, runs) VALUES (?, ?, 1)").run(a.account.id, day);
+    const page = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
+    expect(page).toContain('<section class="usage" id="usage" aria-label="What you have used">');
+    expect(page).toContain('<p class="ut-v name">Free</p>');
+    expect(page).toContain('<p class="ut-v">1<span class="of"> / 1</span></p><progress class="ut-bar" max="1" value="1" aria-label="Apps: 1 of 1"></progress><p class="ut-s">Pro: up to 3</p>');
+    expect(page).toContain('<p class="ut-v">37<span class="of"> / 100</span></p><progress class="ut-bar" max="100" value="37" aria-label="Live fixes this month: 37 of 100"></progress><p class="ut-s">Resets Nov 1</p>');
+    expect(page).toContain('<p class="ut-v">1<span class="of"> / 3</span></p><progress class="ut-bar" max="3" value="1" aria-label="Suggestions today: 1 of 3"></progress><p class="ut-s">Resets at midnight UTC</p>');
+    // at the limit: observe only until the month ends, and the page says problems are still reported
+    t.sql.db.prepare("UPDATE daily SET count = 93 WHERE token = ? AND metric = 'intervention'").run(app.token);
+    expect(await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }))).toContain("Observe only until Nov 1: problems are still reported");
+    // every line of every plan is a row of the table, or one the limit rows already say (apps, history, people, ...)
+    for (const p of PLANS) for (const f of p.features) expect(LIMIT_LINE.test(f.text) || featureRows().includes(f.text), f.text).toBe(true);
+    for (const r of featureRows()) expect(page).toContain(`<th scope="row">${r}</th>`);
+    expect(featureRows()).toContain("Ask about your app in plain words"); // "app" alone does not make a limit line
+    // the trial is once per account: after a subscription the buttons say Upgrade, and nothing offers days free
+    setPlan(t.sql, a.account.id, "free", { stripe_customer_id: "cus_used000001", subscription_id: "sub_used000001", subscription_status: "canceled", current_period_end: "2026-10-01T00:00:00.000Z" });
+    const used = await text(call(t.env, "GET", "/account/billing", { cookie: a.cookie }));
+    expect(used).toContain('data-plan="team"><span>Upgrade to Pro</span>');
+    expect(used).not.toContain("days free");
+    expect(visible(page)).not.toMatch(/—|!/);
   });
 
   it("a paid Pro or Business account: the status line says the price; Pro moves to Business; a server with PLAN_GATES open says it sells nothing", async () => {

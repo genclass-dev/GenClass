@@ -1,5 +1,6 @@
-// HTML for the paid plans: /account/billing (the plan, its renewal or end, the plans side by side, Upgrade, Switch and
-// Manage billing buttons, the seats of a plan sold per seat, and the team: members, invite links and the teams the
+// HTML for the paid plans: /account/billing (the plan, its renewal or end, what the account has used of it with its
+// limits, the plans side by side in one table with Start N days free (while the account still has its trial), Upgrade,
+// Switch and Manage billing buttons, the seats of a plan sold per seat, and the team: members, invite links and the teams the
 // account is a member of; src/team.ts) and the plan-dependent sections of an owned app's dashboard (forwarding and export, and the
 // note on the time ranges). A switch between two paid plans is a new Checkout (src/billing.ts checkout); back from it
 // the page waits for the new plan. Same shell, tokens and rules as the account pages; server-rendered text goes through esc(),
@@ -8,12 +9,13 @@
 // Contact sales, a link to genclass.dev's sales form, whatever the key. Which plans include something is said from billing/plans.json
 // (plansWith), never by name.
 
-import { CLIENT_JS, ORG_CSS, orgRail, PITCH_SHOWN, pitchList, time } from "./account-pages.js";
+import { CLIENT_JS, ORG_CSS, orgRail, pitchList, time } from "./account-pages.js";
 import type { Env } from "./collector.js";
 import type { D1Like, Project, Range } from "./dashboard.js";
 import { integrationRows, integrationsKey, KIND_NAMES, KINDS, maskConfig, openConfig, DATADOG_SITES, POSTHOG_HOSTS, type Kind } from "./forward.js";
 import { DASH_CSS, embed, esc, orgName } from "./pages.js";
 import { studioPage } from "./studio.js";
+import { suggestionLimits } from "./suggest.js";
 import {
   accountPlan,
   billingLive,
@@ -86,9 +88,23 @@ export interface BillingView {
   team?: Team;
   /** The teams this account is a member of (src/team.ts membershipsOf). */
   memberships?: { ownerId: string; email: string | null; githubLogin: string | null; joined: string; active: boolean }[];
+  /** What the account has used of its plan (src/billing.ts): the strip at the top of the page; left out, no strip. */
+  usage?: BillingUsage;
+  /** The days free each paid plan starts with for this account (src/billing.ts trialFor), by plan id; 0 or missing: none. */
+  trialDays?: Record<string, number>;
   /** The AppSumo codes redeemed on this account (src/appsumo.ts), shown with a lifetime grant (access.lifetime). */
   appsumo?: string[];
   now: Date;
+}
+
+/** What an account has used of its plan, against the plan's limits (billing/plans.json limits and suggestions). */
+export interface BillingUsage {
+  /** The account's own apps; `limit` null: no limit. */
+  apps: { used: number; limit: number | null };
+  /** Live fixes this month in the account's busiest app (the limit is per app), its name ("" with no app yet: 0), and when the month ends; null when unknown. */
+  liveFixes: { used: number; limit: number | null; resets: string; app: string } | null;
+  /** Suggestions (model runs) used today against the plan's per day; null when unknown. */
+  suggestions: { used: number; perDay: number } | null;
 }
 
 const BILLING_CSS = `
@@ -133,6 +149,54 @@ const BILLING_CSS = `
   #projects table td.act a:not(.btn){display:inline-flex;align-items:center;min-height:32px}
 }
 @media (max-width:767px){.plan .tag{font-size:12px}}
+/* what the account has used: four quiet tiles, each a number against its limit and a thin bar (a progress element: the
+   CSP allows no style attribute), one calm colour whatever the share: a full Free plan is normal, and the line under
+   the bar says what lifts it */
+.usage{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:22px 0 26px}
+.ut{background:var(--panel);border:1px solid var(--rule);padding:16px 18px 15px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.ut-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;color:var(--ink2);margin:0}
+.ut-h a{font-size:12.5px;color:var(--ink2);text-decoration:underline;text-decoration-color:var(--rule2);text-underline-offset:3px}
+.ut-h a:hover{color:var(--ink)}
+.ut-v{margin:0;font:400 25px/1.15 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ut-v .of{color:var(--ink3);font-size:17px}
+.ut-v.name{font:500 22px/1.2 var(--sans);letter-spacing:-.01em}
+.ut-bar{-webkit-appearance:none;appearance:none;display:block;width:100%;height:5px;border:0;border-radius:0;background:var(--rule);color:var(--accent);overflow:hidden}
+.ut-bar::-webkit-progress-bar{background:var(--rule)}
+.ut-bar::-webkit-progress-value{background:var(--accent)}
+.ut-bar::-moz-progress-bar{background:var(--accent)}
+.ut-track{display:block;height:5px;background:var(--rule)}
+.ut-s{margin:0;font-size:12.5px;color:var(--ink3);line-height:1.45;overflow-wrap:anywhere}
+@media (max-width:1080px){.usage{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.usage{gap:10px;margin:18px 0 22px}.ut{padding:12px 14px;gap:7px}.ut-v{font-size:21px}.ut-v .of{font-size:14px}.ut-v.name{font-size:19px}.ut-s{font-size:12px}}
+@media (max-width:340px){.usage{grid-template-columns:1fr}}
+/* the plans: one table, the plans across the top (name, price, what it is for, the button) and what each includes down
+   the side, so two plans compare along one line; it scrolls sideways inside its frame on a phone, the names column fixed */
+.cmpwrap{overflow-x:auto;margin:0 -20px -20px}
+table.cmp{width:100%;min-width:760px;border-collapse:collapse;table-layout:fixed;font-size:13.5px}
+table.cmp col.k{width:25%}
+table.cmp th,table.cmp td{padding:11px 18px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule);font:400 13.5px/1.4 var(--sans);text-transform:none;letter-spacing:0;white-space:normal;background:none;color:var(--ink)}
+table.cmp tbody tr:last-child>*{border-bottom:0}
+table.cmp thead th{padding:20px 18px 18px;vertical-align:top}
+table.cmp tbody th,table.cmp thead th:first-child{position:sticky;left:0;z-index:1;background:var(--panel)}
+table.cmp tbody th{color:var(--ink2)}
+table.cmp .cur{background:var(--accent-t)}
+table.cmp thead th.cur{box-shadow:inset 0 2px 0 var(--accent)}
+.cmp-n{display:flex;align-items:center;gap:8px;font:500 16px/1.2 var(--sans);color:var(--ink)}
+.cmp .tag{border-radius:0;height:18px;padding:0 6px;font-size:10px}
+.cmp-pr{margin-top:10px;font:400 26px/1 var(--mono);color:var(--ink);white-space:nowrap}
+.cmp-pr small{font:13px var(--sans);color:var(--ink3);margin-left:6px}
+.cmp-pr.words{font-size:17px;line-height:26px}
+.cmp-sum{margin-top:10px;color:var(--ink2);font-size:13px;line-height:1.45;min-height:3.9em}
+.cmp-act{margin-top:14px;min-height:34px;display:flex;align-items:center}
+.cmp-act .btn{width:100%}
+.cmp-act .muted{font-size:12.5px;line-height:1.45}
+.cmp-note{margin-top:8px;font-size:12px;color:var(--ink3);line-height:1.4}
+table.cmp tr.cmp-g th{padding:16px 18px 8px;font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--ink3)}
+.ck{display:inline-block;width:10px;height:6px;border-left:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);transform:rotate(-45deg) translate(1px,-2px)}
+.nope{display:inline-block;width:10px;height:1px;background:var(--ink3);opacity:.5;vertical-align:middle}
+.soon{color:var(--ink3);font-size:12.5px}
+#plans .seats{margin:0 0 8px}
+@media (max-width:600px){table.cmp{min-width:728px}table.cmp col.k{width:108px}table.cmp th,table.cmp td{padding:10px 12px;font-size:13px}table.cmp thead th{padding:16px 12px 14px}.cmp-pr{font-size:22px}.cmp-sum{min-height:0}table.cmp tr.cmp-g th{padding:14px 12px 8px}}
 `;
 
 /** The statuses of a subscription that exists and can still bill (src/stripe.ts HOLDING_STATUSES): one that can be cancelled. */
@@ -311,7 +375,8 @@ function statusLine(v: BillingView, plan: Plan): string {
   return `You are on the ${name} plan, ${esc(priceText(plan, v.country ?? null))}. It renews on ${day(b.current_period_end)}. If you cancel, it ends that day.`;
 }
 
-function planColumn(v: BillingView, p: Plan, current: Plan): string {
+/** The button (or tag) under a plan's name, and the line under it: what this account can do with that plan now. */
+function planAction(v: BillingView, p: Plan, current: Plan): { cur: boolean; pick: boolean; act: string; note: string } {
   // the column marked as the account's: its paid plan, or the grant's
   const cur = p.id === (v.access.source === "comp" || v.access.source === "open" ? v.access.plan.id : current.id);
   const subscribed = !!v.billing.subscription_id && LIVE_STATUSES.has(v.billing.subscription_status ?? "") && current.id !== "free";
@@ -319,34 +384,179 @@ function planColumn(v: BillingView, p: Plan, current: Plan): string {
   // or switch cannot start
   const waiting = !!awaited(v, current);
   const pick = !cur && v.picked === p.id && v.live && !waiting;
-  // the first paid plan's button is the strong one, unless another was picked on the pricing page
+  // the days free this plan starts with for this account: said on the button while the account has them (never on a switch)
+  const days = !subscribed ? (v.trialDays?.[p.id] ?? 0) : 0;
+  const price = priceText(p, v.country ?? null).replace(" / month", " a month").replace(/ \/ (developer|project)/, " a $1");
   // a plan sold per seat asks how many people first (the owner is one); Stripe's page shows it and lets them change it
   const seats =
     p.per_seat === true
       ? `<label class="seats" for="seats-${esc(p.id)}">Seats <input id="seats-${esc(p.id)}" type="number" inputmode="numeric" min="1" max="${MAX_SEATS}" step="1" value="${Math.max(1, v.team?.used ?? 1)}" data-seats="${esc(p.id)}"></label>`
       : "";
+  // the first paid plan's button is the strong one, unless another was picked on the pricing page
+  const label = subscribed ? `Switch to ${esc(p.name)}` : days ? `Start ${days} days free` : `Upgrade to ${esc(p.name)}`;
   // a plan sold per project is bought on that project's own page, from the list below
   const buy = p.per_project === true
     ? v.projects?.length
       ? `<a class="btn" href="#projects"><span>Choose a project</span></a>`
       : '<span class="muted">Add a project first: run npx genclass in your app.</span>'
-    : `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}><span>${subscribed ? "Switch to" : "Upgrade to"} ${esc(p.name)}</span></button>`;
+    : `${seats}<button class="btn${p !== PAID_PLANS[0] && !pick ? " ghost" : ""}" type="button" data-plan="${esc(p.id)}"${pick ? " data-pick" : ""}${days ? ` aria-label="Start ${esc(p.name)} with ${days} days free"` : ""}><span>${label}</span></button>`;
   // genclass.dev's Contact sales form (the site's /enterprise#contact, posting to /api/sales here)
   const talk = `<a class="btn ghost" href="https://genclass.dev/enterprise#contact"><span>Contact sales</span></a>`;
   let act = "";
-  if (cur) act = `<span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>`;
+  let note = "";
+  if (cur) act = `<span class="muted">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "On this server" : "Your current plan"}</span>`;
   else if (p.id === "free") act = subscribed && v.live ? '<span class="muted">To go back to Free, <a href="#manage">cancel your plan</a>.</span>' : "";
-  else if (byAgreement(p)) act = talk;
-  else if (v.live && !waiting) act = buy;
-  const features = p.features
-    .map((f, i) => {
-      const cls = [f.available ? "" : "soon", i >= PITCH_SHOWN ? "folded" : ""].filter(Boolean).join(" ");
-      return `<li${cls ? ` class="${cls}"` : ""}>${esc(f.text)}${f.available || /coming next/i.test(f.text) ? "" : " (coming next)"}</li>`;
+  else if (byAgreement(p)) {
+    act = talk;
+    note = "Terms, invoices and a contract to fit.";
+  } else if (v.live && !waiting) {
+    act = buy;
+    note = days ? `Then ${esc(price)}. Cancel any time before and you pay nothing.` : subscribed && v.billing.subscription_status === "active" ? "Unused days of your plan are refunded." : "";
+  }
+  return { cur, pick, act, note };
+}
+
+/** "7 days", "90 days", "1 year", "2 years": a plan's history. */
+const historyWords = (d: number): string => (d % 365 === 0 ? `${d / 365} year${d === 365 ? "" : "s"}` : `${d} days`);
+const count = (n: number): string => n.toLocaleString("en-US");
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Dec 1": a day in UTC, for the month's end (the counters' month is UTC's, so a local date could say Nov 30). */
+const utcDay = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+};
+
+/** The limit rows of the plans table, from each plan's limits (billing/plans.json): [what, the plan's value]. */
+const LIMIT_ROWS: readonly (readonly [string, (p: Plan) => string])[] = [
+  ["Apps", (p) => (p.limits.apps === null ? "Any number" : count(p.limits.apps))],
+  ["History kept", (p) => historyWords(p.limits.history_days)],
+  ["People", (p) => (p.limits.seats === 1 ? "Just you" : p.limits.seats === null || p.limits.seats === undefined ? "Your whole team" : `Up to ${count(p.limits.seats)}`)],
+  ["Live fixes a month", (p) => (p.limits.live_fixes_per_month === null || p.limits.live_fixes_per_month === undefined ? "Unlimited" : `${count(p.limits.live_fixes_per_month)} per app`)],
+  ["Suggestions a day", (p) => count(suggestionLimits(p).per_day)],
+];
+
+/**
+ * A plan's feature line that the limit rows above already say (its apps, history, people, live fixes, suggestions), or
+ * that is no feature: "Everything in ..." and the trial's own line (the button says that). Exported for the test that
+ * every line of billing/plans.json is either a row of the table or one of these.
+ */
+export const LIMIT_LINE = /^Everything in |days free|^(?:one|up to \d+|any number of) apps?$|history$|last \d+ days|seat limit|suggestions a day|live fixes/i;
+
+/** Whether `p` includes the feature `text`: its own line, or a plan it has "Everything in" (followed, never in a loop). */
+function includes(p: Plan, text: string, seen: Set<string> = new Set()): { available: boolean } | null {
+  if (seen.has(p.id)) return null;
+  seen.add(p.id);
+  for (const f of p.features) {
+    if (f.text === text) return { available: f.available };
+    const m = /^Everything in (.+)$/i.exec(f.text);
+    const from = m ? PLANS.find((x) => x.name.toLowerCase() === m[1]!.trim().toLowerCase()) : undefined;
+    const got = from ? includes(from, text, seen) : null;
+    if (got) return got;
+  }
+  return null;
+}
+
+/** The feature rows of the plans table: every line of every plan that the limit rows do not say, in the order of the plan that first has it. */
+export function featureRows(): string[] {
+  const rows: string[] = [];
+  for (const p of PLANS) for (const f of p.features) if (!LIMIT_LINE.test(f.text) && !rows.includes(f.text)) rows.push(f.text);
+  return rows;
+}
+
+/** The plans side by side: the plans across the top (name, price, what it is for, the button), the limits and features down the side. */
+function plansTable(v: BillingView, current: Plan): string {
+  const acts = PLANS.map((p) => ({ p, ...planAction(v, p, current) }));
+  const head = acts
+    .map(({ p, cur, pick, act, note }) => {
+      const c = priceFor(p, v.country ?? null).price_usd_cents.monthly;
+      const per = p.per_project === true ? " a project" : p.per_seat === true ? " a developer" : "";
+      const price = c === null ? '<div class="cmp-pr words">By agreement</div>' : `<div class="cmp-pr">${esc(dollars(c ?? 0))}<small>${c ? `${per} a month` : "forever"}</small></div>`;
+      const tag = cur ? ` <span class="tag">${v.access.source === "comp" ? "Set up by GenClass" : v.access.source === "open" ? "This server" : "Your plan"}</span>` : "";
+      return `<th scope="col" class="${[cur ? "cur" : "", pick ? "pick" : ""].filter(Boolean).join(" ")}" data-col="${esc(p.id)}"><div class="cmp-n">${esc(p.name)}${tag}</div>${price}<div class="cmp-sum">${esc(p.summary)}</div><div class="cmp-act">${act}</div>${note ? `<div class="cmp-note">${note}</div>` : ""}</th>`;
     })
     .join("");
-  const more = p.features.length - PITCH_SHOWN;
-  const fold = more > 0 ? `<details class="pmore pfold"><summary>${more} more</summary></details>` : "";
-  return `<div class="plan${cur ? " cur" : pick ? " pick" : ""}"><h3>${esc(p.name)}</h3><p class="price">${esc(priceText(p, v.country ?? null))}</p><p class="sum">${esc(p.summary)}</p><ul>${features}</ul>${fold}<div class="act">${act}</div></div>`;
+  const cell = (p: Plan, inner: string) => `<td${acts.find((x) => x.p === p)?.cur ? ' class="cur"' : ""}>${inner}</td>`;
+  const limits = LIMIT_ROWS.map(([what, of]) => `<tr><th scope="row">${esc(what)}</th>${PLANS.map((p) => cell(p, esc(of(p)))).join("")}</tr>`).join("");
+  const features = featureRows()
+    .map((text) => {
+      const cells = PLANS.map((p) => {
+        const got = includes(p, text);
+        return cell(p, !got ? '<span class="nope" role="img" aria-label="Not included"></span>' : got.available ? '<span class="ck" role="img" aria-label="Included"></span>' : '<span class="soon">Coming next</span>');
+      });
+      // a line that says "(coming next)" itself: the cell says it, the row names the feature
+      return `<tr><th scope="row">${esc(text.replace(/\s*\(coming next\)\s*$/i, ""))}</th>${cells.join("")}</tr>`;
+    })
+    .join("");
+  const groups = (label: string) => `<tr class="cmp-g"><th scope="rowgroup" colspan="${PLANS.length + 1}">${esc(label)}</th></tr>`;
+  return `<div class="cmpwrap"><table class="cmp"><colgroup><col class="k">${PLANS.map(() => "<col>").join("")}</colgroup><thead><tr><th scope="col" aria-label="Plan"></th>${head}</tr></thead><tbody>${groups("Limits")}${limits}${groups("What you get")}${features}</tbody></table></div>`;
+}
+
+/** The plan's state in a few words, for its tile: no subscription, a trial and its end, a renewal, an end. */
+function planState(v: BillingView, plan: Plan): string {
+  const b = v.billing;
+  if (v.access.source === "open") return "Everything, on this server";
+  if (lifetime(v.access)) return "For life, from AppSumo";
+  if (v.access.source === "comp") return "Set up by GenClass";
+  if (plan.id === "free" || !b.subscription_id) return plan.id === "free" ? "No subscription" : "Set up by GenClass";
+  if (b.subscription_status === "past_due" || b.subscription_status === "unpaid") return "Payment due: see Manage billing";
+  if (b.cancel_at_period_end) return `Ends ${day(b.current_period_end)}`;
+  if (b.subscription_status === "trialing") return `Free trial until ${day(b.current_period_end)}`;
+  return `Renews ${day(b.current_period_end)}`;
+}
+
+/** A used-against-limit bar; an empty track with no limit. */
+function bar(used: number, limit: number | null, what: string): string {
+  if (limit === null || limit <= 0) return '<span class="ut-track" aria-hidden="true"></span>';
+  return `<progress class="ut-bar" max="${limit}" value="${Math.min(used, limit)}" aria-label="${esc(what)}: ${count(used)} of ${count(limit)}"></progress>`;
+}
+
+/** One tile: a label (and a link), the number against its limit, the bar, a line under it. */
+function tile(label: string, value: string, b: string, sub: string, link = ""): string {
+  return `<div class="ut"><p class="ut-h"><span>${esc(label)}</span>${link}</p>${value}${b}<p class="ut-s">${sub}</p></div>`;
+}
+const numberOf = (used: number, limit: number | null): string => `<p class="ut-v">${count(used)}${limit === null ? "" : `<span class="of"> / ${count(limit)}</span>`}</p>`;
+
+/**
+ * What the account has used of its plan, at the top of the page: the plan, its apps, the busiest app's live fixes this
+ * month and today's suggestions, each against its limit. Nothing here is a new number: the apps are the account's,
+ * the fixes the dashboard's own counters (src/usage.ts), the suggestions the model's daily count (src/suggest.ts).
+ */
+function usageStrip(v: BillingView, plan: Plan): string {
+  const u = v.usage;
+  if (!u) return "";
+  const has = v.access.plan;
+  // the next plan that would lift a limit the account has reached, named in that tile's line
+  const after = (ok: (p: Plan) => boolean): Plan | undefined => PAID_PLANS.slice(PAID_PLANS.indexOf(has) + 1).find(ok) ?? PAID_PLANS.find((p) => p !== has && ok(p));
+  const tiles: string[] = [];
+  tiles.push(tile("Plan", `<p class="ut-v name">${esc(has.name)}</p>`, "", `${planState(v, plan)}<br>${historyWords(has.limits.history_days)} of history`));
+  const life = lifetime(v.access);
+  const moreApps = !life && u.apps.limit !== null && u.apps.used >= u.apps.limit ? after((p) => p.limits.apps === null || p.limits.apps > u.apps.limit!) : undefined;
+  tiles.push(
+    tile(
+      "Apps",
+      numberOf(u.apps.used, u.apps.limit),
+      bar(u.apps.used, u.apps.limit, "Apps"),
+      u.apps.limit === null ? "No limit" : life && u.apps.used >= u.apps.limit ? `For more, write to <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>` : moreApps ? `${esc(moreApps.name)}: ${moreApps.limits.apps === null ? "any number" : `up to ${count(moreApps.limits.apps)}`}` : `${count(Math.max(0, u.apps.limit - u.apps.used))} more on ${esc(has.name)}`,
+      v.projects?.length ? '<a href="#projects">Manage</a>' : "",
+    ),
+  );
+  if (u.liveFixes) {
+    const f = u.liveFixes;
+    const full = f.limit !== null && f.used >= f.limit;
+    tiles.push(
+      tile(
+        "Live fixes this month",
+        numberOf(f.used, f.limit),
+        bar(f.used, f.limit, "Live fixes this month"),
+        f.limit === null ? `No limit on ${esc(has.name)}` : full ? `Observe only until ${utcDay(f.resets)}: problems are still reported` : `${u.apps.used > 1 ? `${esc(f.app)}, ` : ""}Resets ${utcDay(f.resets)}`,
+      ),
+    );
+  }
+  if (u.suggestions) {
+    const s = u.suggestions;
+    tiles.push(tile("Suggestions today", numberOf(s.used, s.perDay), bar(s.used, s.perDay, "Suggestions today"), s.used >= s.perDay ? "Used up: more tomorrow" : "Resets at midnight UTC"));
+  }
+  return `<section class="usage" id="usage" aria-label="What you have used">${tiles.join("")}</section>`;
 }
 
 /** The account's projects, each with its plan and the way to change it (its own page). */
@@ -650,6 +860,13 @@ function teamSection(v: BillingView): string {
 </section>`;
 }
 
+/** "Pro and Business start with 7 days free. ": the plans this account can still try, when they all start with the same days. */
+function trialAside(v: BillingView): string {
+  const t = PAID_PLANS.filter((p) => (v.trialDays?.[p.id] ?? 0) > 0);
+  const days = new Set(t.map((p) => v.trialDays![p.id]));
+  return t.length && days.size === 1 ? `${esc(t.map((p) => p.name).join(" and "))} ${t.length > 1 ? "start" : "starts"} with ${[...days][0]} days free. ` : "";
+}
+
 export function billingPage(nonce: string, v: BillingView): string {
   const plan = planById(v.billing.plan);
   const want = awaited(v, plan);
@@ -698,8 +915,8 @@ export function billingPage(nonce: string, v: BillingView): string {
   <p class="intro">Need more apps or a team? Write to <a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>.</p>
 </section>`
     : `<section class="blk" id="plans">
-  <div class="blk-h"><h2>Plans</h2>${PAID_PLANS.length ? '<span class="aside">US dollars, billed monthly</span>' : ""}</div>
-  <div class="plans">${PLANS.map((p) => planColumn(v, p, plan)).join("")}</div>
+  <div class="blk-h"><h2>Plans</h2>${PAID_PLANS.length ? `<span class="aside">${trialAside(v)}US dollars, billed monthly</span>` : ""}</div>
+  ${plansTable(v, plan)}
   <p class="err" id="planerr" role="alert"></p>
   ${switchNote}${managed}
   <p class="intro">${esc(PLANS_FILE.footer).replace(esc(CONTACT), `<a href="mailto:${esc(CONTACT)}">${esc(CONTACT)}</a>`).replace("Contact sales", '<a href="https://genclass.dev/enterprise#contact">Contact sales</a>')}</p>
@@ -712,6 +929,7 @@ export function billingPage(nonce: string, v: BillingView): string {
   ${custom}
 </div></header>
 ${notice}${test}
+${usageStrip(v, plan)}
 ${plansBlock}
 ${
   manage

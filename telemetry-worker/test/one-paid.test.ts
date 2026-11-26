@@ -85,8 +85,8 @@ describe("Individual on Stripe Checkout, Enterprise by email", () => {
     expect(page).toContain("You are on the <b>Free</b> plan.");
     expect(page).toContain('<button class="btn" type="button" data-plan="individual"><span>Upgrade to Individual</span></button>');
     expect(page).not.toContain('data-plan="enterprise"');
-    expect(page).toContain("$29 / month");
-    expect(page).toContain('<p class="price">By agreement</p>');
+    expect(page).toContain("$29<small> a month</small>");
+    expect(page).toContain('<div class="cmp-pr words">By agreement</div>');
     expect(page).toContain('Questions about Enterprise, self-hosting or invoices? Email <a href="mailto:mehar@genclass.dev">mehar@genclass.dev</a>.');
     expect(page).not.toMatch(/Switching between|To switch between/);
     expect(visible(page)).not.toMatch(/—|!/);
