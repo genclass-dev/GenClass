@@ -385,7 +385,20 @@ export interface Access {
   locked?: "free_projects" | "pro_apps";
   /** How many apps the account's plan covers (coverage); null: no limit. */
   apps?: number | null;
+  /**
+   * An AppSumo lifetime grant (comp_until LIFETIME_UNTIL, src/appsumo.ts): the plan for life with that plan's own
+   * limits (apps, seats), never a subscription, a trial or a renewal. Every other grant is GenClass's by hand.
+   */
+  lifetime?: boolean;
 }
+
+/**
+ * The end date of an AppSumo lifetime grant (src/appsumo.ts): a grant with exactly this comp_until is the plan for
+ * life, with the plan's own limits (accessOf, coverage). GenClass's hand grants end on an agreed date, never this one.
+ */
+export const LIFETIME_UNTIL = "2126-01-01T00:00:00.000Z";
+/** This account row holds an AppSumo lifetime grant. */
+export const isLifetime = (row: { comp_until?: string | null } | null | undefined): boolean => row?.comp_until === LIFETIME_UNTIL;
 
 /** The columns accountAccess reads (accounts, migrations 0004, 0006 and 0014). */
 export interface AccessRow {
@@ -447,9 +460,12 @@ export function accessOf(row: AccessRow | null | undefined, mode: StripeMode | n
   const paid = modeCounts(row.stripe_mode, mode) ? planById(row.plan) : FREE;
   const comp = future(row.comp_until, now);
   const grant = grantPlan(row.comp_plan);
+  // an AppSumo lifetime grant has its plan's own limits, like a subscription to it (isLifetime)
+  const life = comp && isLifetime(row);
   // a paid plan wins a grant of the same plan (Manage billing, the subscription's state), with the grant's room: no
   // seat limit (the grant never had one); coverage gives it every app too
-  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: comp && rank(grant) === rank(paid) ? null : seatsOf(paid, "paid", row.seats) };
+  if (paid.id !== "free" && (!comp || rank(paid) >= rank(grant))) return { plan: paid, source: "paid", seats: comp && !life && rank(grant) === rank(paid) ? null : seatsOf(paid, "paid", row.seats) };
+  if (life) return { plan: grant, source: "comp", seats: grant.limits.seats ?? null, lifetime: true };
   if (comp) return { plan: grant, source: "comp", seats: seatsOf(grant, "comp", null) };
   return NO_ACCESS;
 }
@@ -555,6 +571,7 @@ export interface Coverage {
  * when version 5 came while that same subscription lasts (accounts.apps_kept, migration 0021: what was bought before
  * 13 November 2026 keeps covering the apps it covered). An app with a subscription of its own is always covered and
  * not counted. A grant covers every app, a paid plan under a grant of the same plan too; Free covers its limits.apps.
+ * An AppSumo lifetime grant (isLifetime) covers its plan's limits.apps, like a subscription to that plan.
  */
 export async function coverage(db: D1Like, accountId: string, mode: StripeMode | null, now: Date): Promise<Coverage> {
   const acct = await db.prepare(`SELECT ${ACCESS_COLUMNS}, apps_kept FROM accounts WHERE id = ?`).bind(accountId).first<AccessRow & { apps_kept: number | null }>();
@@ -562,7 +579,7 @@ export async function coverage(db: D1Like, accountId: string, mode: StripeMode |
   const own = accessOf(acct, mode, now);
   let best = own;
   // the best plan a grant gives here (the account's or one copied to an app), which covers every app
-  let granted: Plan | null = acct && future(acct.comp_until, now) ? grantPlan(acct.comp_plan) : null;
+  let granted: Plan | null = acct && future(acct.comp_until, now) && !isLifetime(acct) ? grantPlan(acct.comp_plan) : null;
   const ownPaid = new Set<string>();
   for (const r of rows) {
     const a = projectOwnAccess(r, mode, now);
@@ -573,9 +590,9 @@ export async function coverage(db: D1Like, accountId: string, mode: StripeMode |
   const limit = best.plan.limits.apps ?? null;
   const kept = own.source === "paid" ? Math.max(0, Math.floor(Number(acct?.apps_kept) || 0)) : 0;
   const cap =
-    best.source === "comp" || best.source === "open" || (granted && rank(granted) >= rank(best.plan))
+    (best.source === "comp" && !best.lifetime) || best.source === "open" || (granted && rank(granted) >= rank(best.plan))
       ? null
-      : best.source === "paid"
+      : best.source === "paid" || best.lifetime
         ? limit === null ? null : Math.max(limit, kept)
         : (FREE.limits.apps ?? null);
   return { access: { ...best, apps: cap }, cap, rows, ownPaid };
@@ -593,7 +610,7 @@ export function accessIn(cov: Coverage, project: { token?: string; id?: string |
   let before = 0;
   for (let j = 0; j < i; j++) if (!cov.ownPaid?.has(cov.rows[j]!.token)) before++;
   if (before < cov.cap) return cov.access;
-  return { ...NO_ACCESS, apps: cov.cap, locked: cov.access.source === null ? "free_projects" : "pro_apps" };
+  return { ...NO_ACCESS, apps: cov.cap, locked: cov.access.source === null ? "free_projects" : "pro_apps", ...(cov.access.lifetime ? { lifetime: true } : {}) };
 }
 
 /**

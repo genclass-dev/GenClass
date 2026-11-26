@@ -1998,7 +1998,7 @@ export async function glance(c: C, a: Auth): Promise<Glance> {
   return {
     ok: true,
     plan: team ?? (access.source === null ? "Free" : trialing ? `${access.plan.name} trial` : access.plan.name),
-    status: team ? "with your team" : left !== null ? `${left} day${left === 1 ? "" : "s"} left` : access.source === "comp" ? "from GenClass" : "plan",
+    status: team ? "with your team" : left !== null ? `${left} day${left === 1 ? "" : "s"} left` : access.source === "comp" ? (access.lifetime ? "for life" : "from GenClass") : "plan",
     trial: trialing,
     apps: { used: own.length, of },
     note: access.source === "open" || team ? null : apps,

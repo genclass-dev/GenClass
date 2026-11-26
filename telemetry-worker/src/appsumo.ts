@@ -9,9 +9,11 @@
 //   "genclass-appsumo-v1:" + random part). Nothing is stored before a code is used; scripts/appsumo-codes.mjs makes the
 //   CSV AppSumo takes with the same secret. Without the secret every code is refused (503).
 // - A used code is a row of appsumo_codes (migration 0025): it works once, for one account.
-// - An account stacks 2 codes at most: one gives the Pro plan (id team) for life, two give Business, as GenClass's own
-//   grant (accounts.comp_plan, comp_until LIFETIME_UNTIL). A grant never moves an account down: a higher grant still
-//   running stays (src/plans.ts accessOf picks the better of a subscription and the grant).
+// - One code per account: it gives the Pro plan (id team) for life (the owner, 2026-11-25: Pro, not Business; it was
+//   "two codes give Business" on 2026-11-24), as a grant with comp_until LIFETIME_UNTIL. src/plans.ts gives such a
+//   lifetime grant Pro's own limits (3 apps, one developer) and never a subscription, a trial or a renewal (isLifetime;
+//   src/billing.ts refuses its checkout). A grant never moves an account down: a higher grant GenClass gave by hand and
+//   still running stays (accessOf picks the better of a subscription and the grant).
 // - Browser only, like billing and teams: the CLI's bearer token is refused. AUTH_LIMIT's budget per account.
 
 import { accountContext, fail, page, readJson, redirect, webSession, type C } from "./auth.js";
@@ -20,16 +22,17 @@ import { browserWrite, overBudget, tooMany } from "./billing.js";
 import type { D1Like } from "./dashboard.js";
 import type { Env, HandleOptions } from "./collector.js";
 import { json } from "./http.js";
-import { grantPlan, planById, PLANS } from "./plans.js";
+import { grantPlan, LIFETIME_UNTIL, planById, PLANS } from "./plans.js";
+
+export { LIFETIME_UNTIL };
 
 /** Crockford's base32: no I, L, O or U, so a code read aloud or retyped stays one code. */
 const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const CODE_RE = /^GC-([0-9A-HJKMNP-TV-Z]{12})-([0-9A-HJKMNP-TV-Z]{8})$/;
-/** A grant for life: comp_until this far out (accounts.comp_until is a date). */
-export const LIFETIME_UNTIL = "2126-01-01T00:00:00.000Z";
-/** Codes one account can stack. */
-export const MAX_CODES = 2;
-const PLAN_FOR = (codes: number): string => (codes >= 2 ? "business" : "team");
+/** Codes one account can hold: one, Pro for life. */
+export const MAX_CODES = 1;
+/** The plan a code gives, for life. */
+const PLAN_ID = "team";
 
 const b32 = (bytes: Uint8Array, chars: number): string => {
   let bits = 0;
@@ -92,17 +95,17 @@ export async function redeemCode(db: D1Like, secret: string | undefined, account
   if (used) {
     if (used.account_id !== accountId || used.refunded) return { ok: false, status: 409, error: "this code was redeemed already" };
     const n = await codesOf(db, accountId);
-    return { ok: true, plan: planById(PLAN_FOR(n)).name, codes: n, already: true };
+    return { ok: true, plan: planById(PLAN_ID).name, codes: n, already: true };
   }
   const before = await codesOf(db, accountId);
-  if (before >= MAX_CODES) return { ok: false, status: 409, error: `one account holds ${MAX_CODES} codes at most, and yours has ${before}` };
+  if (before >= MAX_CODES) return { ok: false, status: 409, error: "this account has an AppSumo code already, and one code is all an account takes; redeem this one on another account, or write to mehar@genclass.dev" };
   try {
     await db.prepare("INSERT INTO appsumo_codes (code, account_id, redeemed) VALUES (?, ?, ?)").bind(code, accountId, now.toISOString()).run();
   } catch {
     return { ok: false, status: 409, error: "this code was redeemed already" };
   }
   const n = before + 1;
-  const plan = planById(PLAN_FOR(n));
+  const plan = planById(PLAN_ID);
   const acct = await db.prepare("SELECT comp_plan, comp_until FROM accounts WHERE id = ?").bind(accountId).first<{ comp_plan: string | null; comp_until: string | null }>();
   const running = !!acct?.comp_until && Date.parse(acct.comp_until) > now.getTime();
   // a higher grant GenClass gave by hand stays exactly as it is (its plan and its end); otherwise the code's plan, for life
@@ -126,7 +129,7 @@ export async function routeAppsumo(request: Request, url: URL, path: string, env
     const a = await webSession(c);
     if (!a) return redirect(`/login?next=${encodeURIComponent(`/account/appsumo${code ? `?code=${code}` : ""}`)}`);
     const codes = await codesOf(c.db, a.account.id);
-    return page(200, (n) => appsumoPage(n, { me: label(a.account), code, codes, plan: codes ? planById(PLAN_FOR(codes)).name : null, ready: !!env.APPSUMO_CODE_SECRET, max: MAX_CODES }));
+    return page(200, (n) => appsumoPage(n, { me: label(a.account), code, codes, plan: codes ? planById(PLAN_ID).name : null, ready: !!env.APPSUMO_CODE_SECRET, max: MAX_CODES }));
   }
 
   if (m !== "POST") return method();
