@@ -562,6 +562,8 @@ function usageStrip(v: BillingView, plan: Plan): string {
 /** The account's projects, each with its plan and the way to change it (its own page). */
 function projectsSection(v: BillingView): string {
   if (!v.projects?.length) return "";
+  // the same words as the plans table: the days free the first paid plan starts with, while the account has them
+  const trial = PAID_PLANS[0] ? (v.trialDays?.[PAID_PLANS[0].id] ?? 0) : 0;
   const rows = v.projects
     .map((p) => {
       const a = p.access;
@@ -571,7 +573,7 @@ function projectsSection(v: BillingView): string {
         : a.plan.id === "free"
           ? "Free"
           : `<b>${esc(a.plan.name)}</b>${a.source === "comp" ? (life ? " (for life, from AppSumo)" : " (set up by GenClass)") : ""}`;
-      const act = a.source === "paid" || life ? `<a href="/account/billing?project=${encodeURIComponent(p.id)}">See plan</a>` : `<a class="btn${a.locked ? "" : " ghost"}" href="/account/billing?project=${encodeURIComponent(p.id)}"><span>${a.locked ? "Choose a plan" : "Upgrade"}</span></a>`;
+      const act = a.source === "paid" || life ? `<a href="/account/billing?project=${encodeURIComponent(p.id)}">See plan</a>` : `<a class="btn${a.locked ? "" : " ghost"}" href="/account/billing?project=${encodeURIComponent(p.id)}"><span>${a.locked ? "Choose a plan" : trial ? `Start ${trial} days free` : "Upgrade"}</span></a>`;
       return `<tr><td>${esc(p.name)}</td><td>${what}</td><td class="act">${act}</td></tr>`;
     })
     .join("");
