@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`genclass_scan` on the hosted check's free view no longer lists blank findings.** Findings genclass.dev keeps
+  locked without Pro (their what, where and fix) were printed as `- [moderate]  (phone): "" at ""`; they are now
+  counted in one line, and the agent fixes the ones shown.
+- **`init --help` prints the help.** It used to run init and write `.mcp.json` and the skill.
+
 - **`genclass_analytics {source: "production"}` says what the app's plan leaves out.** Since 2026-11-11 a dashboard
   on the Free plan shows 7 days and no visitor analytics (they come with Team). The tool now prints one line for
   each (`Showing 7d, not 30d: ...`, `Upgrade needed for visitor analytics ...`) with the plans page, so the agent

@@ -10,7 +10,7 @@ import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
 import { RUNTIME_VERSION } from "../src/clients.js";
 import { McpServer } from "../src/mcp.js";
-import { localScanBin, runScan, scanCommand, type Runner, type ScanReport } from "../src/scan.js";
+import { localScanBin, runScan, scanCommand, scanText, type Runner, type ScanReport } from "../src/scan.js";
 import { TOOLS, callTool } from "../src/tools.js";
 
 const roots: string[] = [];
@@ -153,3 +153,23 @@ describe("genclass_scan: the command (AGENT.md §4.2)", () => {
     expect(res.structuredContent).toEqual(REPORT);
   });
 });
+
+describe("genclass_scan: the hosted check's free view", () => {
+  it("counts the findings it keeps locked instead of listing blank lines (the 2026-11-25 sandbox run)", () => {
+    const r = {
+      format: "genclass-scan/1", url: "https://example.com/", ranAt: "hosted", runtime: null, browser: null,
+      score: { value: 64, basis: "x" }, categories: [], top: [], summary: { total: 3, moderate: 2, minor: 1 }, views: [],
+      findings: [
+        { kind: "csp-missing", severity: "moderate", count: 1, views: ["phone"], target: "No Content-Security-Policy", selector: "", message: "no header", fix: "send one" },
+        { kind: "", severity: "moderate", count: 1, views: ["phone"], target: "", selector: "", message: "", fix: null },
+        { kind: "", severity: "minor", count: 7, views: ["desktop"], target: "", selector: "", message: "", fix: null },
+      ],
+      blocked: null, notes: [],
+    } as unknown as ScanReport;
+    const text = scanText(r, "npx @genclass/runtime", "");
+    expect(text).toContain("csp-missing");
+    expect(text).not.toContain(': "" at ""');
+    expect(text).toContain("… and 2 more that genclass.dev's free view counts without their details");
+  });
+});
+

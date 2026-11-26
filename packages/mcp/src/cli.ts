@@ -198,7 +198,8 @@ export function configCmd(io: CliIo, id: string | undefined): number {
 
 export async function runCli(argv: string[], io: CliIo & { stdin: NodeJS.ReadableStream; stdout: NodeJS.WritableStream; stderr: NodeJS.WritableStream }): Promise<number> {
   const [cmd, ...rest] = argv;
-  if (cmd === "--help" || cmd === "-h" || cmd === "help") {
+  // help anywhere on the line is help: `init --help` used to run init and write files (the 2026-11-25 sandbox run)
+  if (cmd === "--help" || cmd === "-h" || cmd === "help" || rest.includes("--help") || rest.includes("-h")) {
     io.out(HELP);
     return 0;
   }
