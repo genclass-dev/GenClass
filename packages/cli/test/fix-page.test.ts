@@ -3,9 +3,9 @@
 // sign-in when there is one (signed out works too), the free view hands its worst findings to the agent, and the
 // page's words reach the agent as data.
 import { PassThrough } from "node:stream";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fix } from "../src/fix.mjs";
-import { fixPage, isAddress, pageFindings, pagePrompt, pageReport } from "../src/fix-page.mjs";
+import { fixPage, isAddress, isLocalPage, pageFindings, pagePrompt, pageReport } from "../src/fix-page.mjs";
 import { ACCOUNT, HOST, isolate, printed, SESSION } from "./helpers.js";
 
 isolate();
@@ -47,6 +47,33 @@ describe("genclass fix <address>: which words are an address (src/fix-page.mjs)"
   it("a host with a dot, with or without https:// and a path; never a number, a kind or all", () => {
     for (const yes of ["shop.example.com", "https://shop.example.com/pricing?x=1", "stripe.com/pricing", "http://old.example.com:8080/a"]) expect(isAddress(yes)).toBe(true);
     for (const no of ["1", "stale", "all", "localhost", "a b.com", "", ".com", "shop.", "ftp://x.example"]) expect(isAddress(no)).toBe(false);
+  });
+});
+
+describe("genclass fix <address> on a page of this machine or its network (the 2026-11-25 onboarding walk)", () => {
+  it("is never sent to genclass.dev: it says how to check the page here instead, and asks no Pro", async () => {
+    for (const yes of ["localhost:5173", "http://localhost:5199/cart", "127.0.0.1:5199", "http://192.168.1.20:3000/", "[::1]:8080", "shop.local"]) expect(isLocalPage(yes), yes).toBe(true);
+    // a problem's kind or number is never a page, so it still needs Pro (cli.mjs pageFix)
+    for (const no of ["shop.example.com", "https://genclass.dev/scan", "stale", "2", "all", "double-submit", ""]) expect(isLocalPage(no), no).toBe(false);
+    expect(isLocalPage("localhost")).toBe(true);
+    for (const address of ["localhost:5173", "127.0.0.1:5199", "http://192.168.1.20:3000/"]) {
+      const s = server({ report: [200, { ok: true, report: REPORT }] });
+      let said = "";
+      const err = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown) => ((said += String(chunk)), true)) as never);
+      let code: unknown;
+      try {
+        await printed(async () => (code = await fix({ what: address, print: true }, { creds: null, fetchFn: s.fetchFn })));
+      } finally {
+        err.mockRestore();
+      }
+      expect(code, address).toBe(2);
+      expect(s.seen, address).toEqual([]);
+      expect(said).toContain("which genclass.dev's page check cannot reach");
+      expect(said).toContain(`npx genclass scan ${address} --local`);
+      expect(said).not.toMatch(/Pro|Sign in/);
+    }
+    const j = JSON.parse(await printed(async () => fixPage({ what: "localhost:5173", json: true }, { creds: null })));
+    expect(j).toMatchObject({ ok: false, local: true });
   });
 });
 

@@ -154,7 +154,8 @@ function listProblems(list, shown) {
  */
 export function fix(o = {}, deps = {}) {
   // `genclass fix shop.example.com`: a page's address (no problem's number or kind has a dot): its page check's findings
-  if (typeof o.what === "string" && o.what.includes(".")) return import("./fix-page.mjs").then((m) => m.fixPage(o, deps));
+  // `genclass fix localhost:5173` too: a local page gets its own answer (fix-page.mjs isLocalPage), not "no problem localhost"
+  if (typeof o.what === "string" && (o.what.includes(".") || /^(https?:\/\/)?(localhost|\[)/i.test(o.what.trim()))) return import("./fix-page.mjs").then((m) => m.fixPage(o, deps));
   const promptFor = (target, app, list, pick) => (pick === "all" ? fixAllPrompt(target.name, app.range, list) : fixPrompt(target.name, app.range, pick));
   return appView(o, deps, {
     name: "fix",

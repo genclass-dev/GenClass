@@ -65,3 +65,18 @@ describe("genclass onboard <code> (setup.mjs onboard, telemetry-worker src/onboa
     expect(text).toContain("expired or was used already");
   });
 });
+
+describe("the setup's last lines: Day to day (src/setup.mjs closing)", () => {
+  it("on Free names only what works there (fix <url>, scan <url>, upgrade), with Pro the Pro commands (the 2026-11-25 onboarding walk)", async () => {
+    const { closing } = await import("../src/setup.mjs");
+    const base = { steps: [], signedIn: true, complete: true, app: { token: "gc_t", name: "shop" } };
+    const free = await printed(() => closing({ ...base, account: { cli: { paid: false, plan: "Pro" } } }));
+    for (const line of ["npx genclass fix <url>", "npx genclass scan <url>", "npx genclass upgrade"]) expect(free).toContain(line);
+    expect(free).not.toContain("npx genclass suggest");
+    expect(free).not.toContain("npx genclass dashboard");
+    const pro = await printed(() => closing({ ...base, account: { cli: { paid: true } } }));
+    expect(pro).toContain("npx genclass suggest");
+    expect(pro).toContain("npx genclass dashboard");
+    expect(pro).not.toContain("npx genclass upgrade");
+  });
+});
