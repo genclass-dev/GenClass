@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The coding agent step connects your running app too.** It used to write `.mcp.json` and the skill and then ask
+  you to restart and add two lines by hand, so GenClass's MCP server said "No page has connected yet". It now adds the
+  dev-only lines that connect the app's dev pages to the server, right after GenClass's import in your entry file,
+  with the runtime's `init --agent-link`. They are shown first and asked like the setup's other edits (`--yes` applies
+  them), and `genclass remove` takes them out. The step then says only what is left: reload your agent's MCP servers,
+  or start a new session. An app set up before this release, with `.mcp.json` but not the lines, sees the step again
+  as "Connect your running app to the agent". Where the build has no known development check (Angular, Nuxt, Astro,
+  plain HTML), the lines are printed to add.
+
 - **An app with GenClass already in its code, but no key yet, is put in your account in one go.** GenClass's own
   starter templates (`templates/react-vite` and the others) import `@genclass/runtime/auto` themselves. On those,
   the setup's "Put this app in your account" step created the app, printed its key to add by hand, then said the app

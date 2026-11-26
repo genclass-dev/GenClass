@@ -128,6 +128,13 @@ const META_CONFIG = String.raw`<metaname="genclass"content="[^"]*"/?>`;
 const DEV_LINE = String.raw`if\(${COND}\)${DEVTOOLS_CALL};?`;
 // the same with braces (ESLint's `curly` fix)
 const DEV_BLOCK = String.raw`if\(${COND}\)\{${DEVTOOLS_CALL};?\}`;
+// the dev-only agent link (init --agent-link, agent-link.mjs): two imports and the call, on GenClass.runtime or on the
+// runtime a hand-written `const rt = GenClass.init(...)` keeps
+const AGENT_RT = String.raw`import\{GenClass\}from"@genclass/runtime";?`;
+const AGENT_IMPORT = String.raw`import\{connectAgent\}from"@genclass/runtime/agent";?`;
+const AGENT_ARG = String.raw`(?:GenClass\.runtime|[A-Za-z_$][\w$]*)`;
+const AGENT_LINE = String.raw`if\(${COND}\)connectAgent\(${AGENT_ARG}\);?`;
+const AGENT_BLOCK = String.raw`if\(${COND}\)\{connectAgent\(${AGENT_ARG}\);?\}`;
 /** Statements init writes on one marked line (normalised, see norm()). */
 const LINE_RE = new RegExp(
   "^(?:" +
@@ -137,6 +144,10 @@ const LINE_RE = new RegExp(
       META_CONFIG,
       DEV_LINE,
       DEV_BLOCK,
+      AGENT_RT,
+      AGENT_IMPORT,
+      AGENT_LINE,
+      AGENT_BLOCK,
       String.raw`import\{isDevModeasgenclassDevMode\}from"@angular/core";?`,
       String.raw`import\{GenClassInit\}from"[^"]*genclass-init";?`,
       String.raw`<GenClassInit/>`,
@@ -155,6 +166,10 @@ const BLOCK_RE = new RegExp(
       CONFIG_STATEMENT,
       DEV_LINE,
       DEV_BLOCK,
+      AGENT_RT,
+      AGENT_IMPORT,
+      AGENT_LINE,
+      AGENT_BLOCK,
       String.raw`importtype\{AppProps\}from"next/app";?`,
       String.raw`exportfunctionGenClassInit\(\)\{returnnull;?\}`,
       String.raw`exportdefaultdefineNuxtPlugin\(\(\)=>\{(?:${DEV_LINE}|${DEV_BLOCK})?\}\);?`,

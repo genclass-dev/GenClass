@@ -307,7 +307,9 @@ read a report, what to say when done, what to do when the tools are missing) is 
 To remove it: delete `.claude/skills/genclass/` (or the directory the skill tool wrote to); with the plugin,
 `/plugin uninstall genclass@genclass`.
 
-Then connect the app's development build (once). The agent link needs the newest runtime line, `@genclass/runtime`
+Then connect the app's development build (once). `init` does it for you: it runs the runtime CLI at the version it
+pins with `init --agent-link`, which shows the lines it adds after GenClass's import in your entry file and asks
+first (`--no-link` skips it). By hand: the agent link needs the newest runtime line, `@genclass/runtime`
 0.3.0-beta.1 or later: `npm install @genclass/runtime@0.3.0-beta.7`, the version this release was tested with (npm's
 `latest` is the older 0.2.x, which has no agent entry):
 

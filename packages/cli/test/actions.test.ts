@@ -10,7 +10,7 @@ import { addWorkflow, connectAgent, connectGithubApp, mcpServer, openBrowser, pl
 import { BUILD, SKILL_FILE, WORKFLOW_FILE } from "../src/assets.mjs";
 import { parseArgs, run, usage, USAGE } from "../src/cli.mjs";
 import { githubName, gitInfo } from "../src/git.mjs";
-import { WORKFLOW_PATH } from "../src/state.mjs";
+import { readState, WORKFLOW_PATH } from "../src/state.mjs";
 import { ago, checklist, clean, summary, visible, wrap } from "../src/tui.mjs";
 import { saveCredentials } from "../../runtime/bin/lib/account.mjs";
 import { ACCOUNT, fakeServer, HOST, isolate, printed, SESSION, tempDir, viteApp, write } from "./helpers.js";
@@ -174,7 +174,27 @@ describe("genclass: the coding agent's configuration (src/actions.mjs planAgentC
     const wrote = await printed(async () => expect(await connectAgent({ cwd: w } as never, { yes: true })).toBe("done"));
     expect(JSON.parse(readFileSync(join(w, ".mcp.json"), "utf8"))).toEqual({ mcpServers: { genclass: mcpServer() } });
     expect(wrote).toContain(SKILL_PATH);
-    expect(wrote.replace(/\s+/g, " ")).toContain('ask it "is GenClass connected?"');
+    // a folder with no app: nothing to connect yet, and what is left is said once
+    expect(wrote.replace(/\s+/g, " ")).toContain("Left to do: reload your coding agent's MCP servers (Claude Code: /mcp) or start a new session in this folder.");
+  });
+
+  it("an app with GenClass gets the dev-only agent link in its entry, shown first; the step then only says what is left (owner, 2026-11-25)", async () => {
+    const dir = tempDir();
+    viteApp(dir, { dependencies: { react: "^19.0.0", "react-dom": "^19.0.0", "@genclass/runtime": "0.3.0-beta.7" } });
+    write(dir, { "src/main.jsx": 'import "@genclass/runtime/auto";\nimport { createRoot } from "react-dom/client";\n' });
+    const said = (await printed(async () => expect(await connectAgent({ cwd: dir } as never, { yes: true })).toBe("done"))).replace(/\s+/g, " ");
+    expect(said).toContain("+ import { connectAgent } from \"@genclass/runtime/agent\"; // genclass:init");
+    expect(readFileSync(join(dir, "src/main.jsx"), "utf8")).toContain("if (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime); // genclass:init\nimport { createRoot }");
+    expect(said).toContain("Left to do: reload your coding agent's MCP servers (Claude Code: /mcp) or start a new session in this folder, and open your app's dev server.");
+    expect(said).not.toContain("Restart your coding agent");
+    // the configuration is there, the link is not: the step only adds the link, and once it is there the state is done
+    write(dir, { "src/main.jsx": 'import "@genclass/runtime/auto";\n' });
+    const before = readFileSync(join(dir, ".mcp.json"), "utf8");
+    const state = await readState({ cwd: dir }, { runGit: () => null });
+    expect(state.steps.find((x) => x.id === "agent")).toMatchObject({ state: "todo", doing: "Connect your running app to the agent", detail: ".mcp.json · your app is not connected yet" });
+    await printed(async () => expect(await connectAgent({ cwd: dir } as never, { yes: true })).toBe("done"));
+    expect(readFileSync(join(dir, ".mcp.json"), "utf8")).toBe(before);
+    expect((await readState({ cwd: dir }, { runGit: () => null })).steps.find((x) => x.id === "agent")).toMatchObject({ state: "done" });
   });
 
   it("the skill is the MCP package's own, with the marker both commands go by; a file the person made their own is kept", () => {

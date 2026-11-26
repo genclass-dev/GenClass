@@ -71,13 +71,21 @@ describe("genclass setup --yes on GenClass's own starter, set up by hand with no
     expect(list.map((a) => a.name)).toEqual(["genclass-react-vite-starter"]);
     const token = list[0].token;
     expect(readFileSync(join(dir, "src/genclass.config.ts"), "utf8")).toContain(`GENCLASS_CONFIG = { token: "${token}" };`);
-    // the starter's import stays as it was; the options file is imported right before it, on a marked line
-    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toBe(main.replace('import "@genclass/runtime/auto";', 'import "./genclass.config"; // genclass:init\nimport "@genclass/runtime/auto";'));
+    // the starter's import stays as it was; the options file is imported right before it, on a marked line, and the
+    // coding agent step puts the dev-only agent link right after it
+    const link = [
+      'import { GenClass } from "@genclass/runtime"; // genclass:init',
+      'import { connectAgent } from "@genclass/runtime/agent"; // genclass:init',
+      "if (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime); // genclass:init",
+    ].join("\n");
+    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toBe(main.replace('import "@genclass/runtime/auto";', `import "./genclass.config"; // genclass:init\nimport "@genclass/runtime/auto";\n${link}`));
+    expect(said).toContain("Left to do: reload your coding agent's MCP servers");
 
     // the next reading of the state: Runtime is done, and the dashboard waits for the deployed site
     const state = await readState({ cwd: dir });
     expect(state.steps.find((s) => s.id === "runtime")).toMatchObject({ state: "done" });
     expect(state.steps.find((s) => s.id === "dashboard")).toMatchObject({ state: "waiting" });
+    expect(state.steps.find((s) => s.id === "agent")).toMatchObject({ state: "done" });
 
     // remove takes out exactly what was added: the starter is back to what it was, its import and package kept
     await printed(async () => expect(await runtimeCli("remove", ["--yes", "--no-install", "--cwd", dir])).toBe(0));
@@ -99,7 +107,8 @@ describe("genclass setup --yes on GenClass's own starter, set up by hand with no
     expect(said).not.toContain("not in your account yet");
     // the step is not done until the key is in the code, so an agent is told it did not finish
     expect(exit).toBe(1);
-    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toBe('import { GenClass } from "@genclass/runtime";\nGenClass.init();\n');
+    // no key in the code, but the agent step connects the running app after that call all the same
+    expect(readFileSync(join(dir, "src/main.tsx"), "utf8")).toBe('import { GenClass } from "@genclass/runtime";\nGenClass.init();\nimport { connectAgent } from "@genclass/runtime/agent"; // genclass:init\nif (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime); // genclass:init\n');
     expect(existsSync(join(dir, "src/genclass.config.ts"))).toBe(false);
   });
 });

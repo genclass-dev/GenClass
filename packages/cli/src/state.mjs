@@ -20,6 +20,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readCredentialsFor } from "../../runtime/bin/lib/account.mjs";
+import { planAgentLink } from "../../runtime/bin/lib/agent-link.mjs";
 import { detectProject } from "../../runtime/bin/lib/detect.mjs";
 import { hostConfig } from "../../runtime/bin/lib/host.mjs";
 import { accountLabel, inspectProject } from "../../runtime/bin/lib/init.mjs";
@@ -354,14 +355,26 @@ export async function readState(o = {}, deps = {}) {
 
   // 6. the coding agent
   const agents = [...new Set([...agentConfigs(cwd), ...(git.root && git.root !== cwd ? agentConfigs(git.root) : [])])];
+  // the app's dev build reaches that server through three dev-only lines in its entry (agent-link.mjs): an app with
+  // GenClass and a known place for them is not connected until they are there (the owner, 2026-11-25: "the mcp setup
+  // leaves the app unwired")
+  let link = null;
+  try {
+    link = isApp && !st.fresh ? planAgentLink(project, cwd, st.files) : null;
+  } catch {
+    link = null;
+  }
+  const unlinked = !!link && !link.done && link.changes.length > 0;
   steps.push({
     id: "agent",
     title: "Coding agent",
-    doing: "Connect your coding agent",
-    state: !isApp ? "optional" : agents.length ? "done" : "todo",
-    detail: agents.length ? agents.join(", ") : "",
-    why: "Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project.",
-    more: "It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.",
+    doing: agents.length && unlinked ? "Connect your running app to the agent" : "Connect your coding agent",
+    state: !isApp ? "optional" : agents.length && !unlinked ? "done" : "todo",
+    detail: agents.length ? `${agents.join(", ")}${unlinked ? " · your app is not connected yet" : ""}` : "",
+    why: agents.length && unlinked
+      ? `Adds three dev-only lines to ${link.changes[0].rel}, so the agent sees your running app. You see them first.`
+      : `Adds GenClass's tools and its skill to Claude Code, Cursor and other agents in this project${unlinked ? ", and the dev-only lines that connect your running app" : ""}.`,
+    more: `It adds GenClass's MCP server to the project's agent configuration (.mcp.json) and the skill that tells the agent how to use it (.claude/skills/genclass/SKILL.md). The server runs on your machine and lets an agent ask what went wrong on a page, replay it and check its fix.${link ? " It also adds three lines to your app's entry that only development builds run: they connect your dev pages to that server. A production build drops them, and npx genclass remove takes them out." : ""}`,
     run: "npx genclass setup",
     human: null,
   });

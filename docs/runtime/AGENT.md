@@ -78,6 +78,16 @@ production build drops it with the dead branch (the package's `sideEffects` list
 idempotent and returns that runtime here. `genclass_setup` prints this form, because the link alone needs no runtime in
 production, where `GenClass.init()` would run for every visitor and send anonymous diagnostics from public hosts by default.
 
+An app that already has GenClass gets the link written for it: `npx @genclass/runtime@beta init --agent-link`
+(`bin/lib/agent-link.mjs`; `npx -y @genclass/mcp@0.2.2 init` and the `genclass` command's coding agent step run it) puts
+three lines right after the `/auto` import, or after a top-level `const rt = GenClass.init(...)`, with init's marker:
+`import { GenClass } from "@genclass/runtime"`, `import { connectAgent } from "@genclass/runtime/agent"` and
+`if (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime)` (Next.js and webpack:
+`process.env.NODE_ENV === "development"`; on that `rt` when there is one). It shows the diff and asks first, `remove`
+takes the lines out, and a project whose build has no known development check (Angular, Nuxt, Astro, plain HTML) is
+told the lines instead. A Vite production build of the react-vite starter with them has no agent code and no bridge
+address in any chunk, the same chunks as without them (2026-11-25).
+
 It runs only on pages served from this machine (`localhost`, `127.x`, `[::1]`, `*.localhost`: names the browser itself
 resolves to loopback) and talks only to a loopback URL; elsewhere it returns an inert connection. A page on a `*.test`
 or `*.local` name or a LAN address (names that go through DNS, which a hostile network controls) needs

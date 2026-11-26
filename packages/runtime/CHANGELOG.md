@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`init --agent-link` connects the app's development build to your coding agent.** It adds the three dev-only lines
+  that connect its pages to GenClass's MCP server (`@genclass/mcp`), right after the `@genclass/runtime/auto` import
+  (init's or your own): `import { GenClass } from "@genclass/runtime"`, `import { connectAgent } from
+  "@genclass/runtime/agent"` and `if (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime)`.
+  Next.js and webpack test `process.env.NODE_ENV === "development"` instead. An app that starts GenClass with its own
+  top-level `const rt = GenClass.init(...)` gets the call on that `rt`, right after it. Each line carries init's
+  marker, and `remove` now recognises these statements, so it takes them out and leaves the file as it was. The diff is
+  shown and asked first (`--yes` applies it, `--dry-run` shows it). On an app with GenClass already in it, only these
+  lines are added; on a new setup they come with init's own changes. A build with no known development check
+  (Angular, Nuxt, Astro, plain HTML) is told the lines to add instead, and nothing is written. An app that already
+  imports the agent entry is left as it is. A production build drops the lines (`bin/lib/agent-link.mjs`, `edit.mjs`).
+
 - **`connect` gives a hand-written setup its key when it can do so without touching your code.** On an app that
   brings GenClass in with its own `import "@genclass/runtime/auto"` (GenClass's starter templates do) and has no key,
   `connect` used to create the app and print the key to add by hand. It now writes the key the way `init` writes its
