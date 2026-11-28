@@ -2,8 +2,9 @@
 # this repository; this is the draft and the steps, written 2026-10-24 from https://github.com/nuxt/modules (README,
 # "Contribution" and "Schema") and its lib/categories.ts.
 #
-# Prerequisite: @genclass/nuxt 0.1.0 published on npm (the release workflow; AGENTS.md rule 9). The list reads the
-# package's description, npm name and maintainers from npm, so the entry cannot be synced before that.
+# Prerequisite: @genclass/nuxt 0.1.0 published on npm (.github/workflows/release-nuxt.yml on a `nuxt-v0.1.0` tag; the
+# first version is the owner's one publish from the run's `nuxt-tarball` artifact; AGENTS.md rule 9). The list reads
+# the package's description, npm name and maintainers from npm, so the entry cannot be synced before that.
 #
 # Steps (a pull request, no issue first):
 #   1. Fork https://github.com/nuxt/modules, clone it, `pnpm install`.
