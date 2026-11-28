@@ -180,7 +180,7 @@ Playwright test that fails until the fix is in. Its `genclass_scan` tool audits 
 `scan <url>` above. Everything stays on your machine unless you turn on one of the opt-ins in its Privacy section.
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.2
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.3
 ```
 
 ```ts

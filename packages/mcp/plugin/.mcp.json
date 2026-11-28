@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }

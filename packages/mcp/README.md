@@ -22,7 +22,7 @@ inside your network ([genclass.dev/enterprise](https://genclass.dev/enterprise))
 ## Install
 
 Pick your client. Every block pins this release, so the client starts exactly this version;
-`npx -y @genclass/mcp@0.2.2 config <client>` prints the same lines, and `genclass_setup` prints the block for the
+`npx -y @genclass/mcp@0.2.3 config <client>` prints the same lines, and `genclass_setup` prints the block for the
 client it runs in.
 
 <!-- install:start (generated from src/clients.ts by `npm run sync -w @genclass/mcp`; edit it there) -->
@@ -39,8 +39,8 @@ As a plugin (the server, a prompt hook that brings new findings to each prompt, 
 Or the server alone (`--scope project` writes `.mcp.json` for everyone on the project; `--scope user` for all your projects). `init` also writes the skill to `.claude/skills/genclass/SKILL.md` (`--no-skill` leaves it out):
 
 ```bash
-claude mcp add --scope project genclass -- npx -y @genclass/mcp@0.2.2
-# or: npx -y @genclass/mcp@0.2.2 init --hook   (.mcp.json and the skill, plus the prompt hook in .claude/settings.json)
+claude mcp add --scope project genclass -- npx -y @genclass/mcp@0.2.3
+# or: npx -y @genclass/mcp@0.2.3 init --hook   (.mcp.json and the skill, plus the prompt hook in .claude/settings.json)
 ```
 
 Or just the skill (no server): `npx skills add genclass-dev/genclass-plugin`. (`genclass-dev/genclass-plugin` is this plugin at a repository root, assembled from this package; the marketplace in `genclass-dev/GenClass` lists the same plugin.)
@@ -56,7 +56,7 @@ Settings, Developer, Edit Config (`~/Library/Application Support/Claude/claude_d
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -65,7 +65,7 @@ Settings, Developer, Edit Config (`~/Library/Application Support/Claude/claude_d
 
 ### Cursor
 
-[![Add genclass MCP server to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/link/mcp/install?name=genclass&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBnZW5jbGFzcy9tY3BAMC4yLjIiXX0%3D) or `cursor://anysphere.cursor-deeplink/mcp/install?name=genclass&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBnZW5jbGFzcy9tY3BAMC4yLjIiXX0%3D`
+[![Add genclass MCP server to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/link/mcp/install?name=genclass&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBnZW5jbGFzcy9tY3BAMC4yLjMiXX0%3D) or `cursor://anysphere.cursor-deeplink/mcp/install?name=genclass&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBnZW5jbGFzcy9tY3BAMC4yLjMiXX0%3D`
 
 Or `.cursor/mcp.json` in the project (`~/.cursor/mcp.json` for all projects):
 
@@ -76,7 +76,7 @@ Or `.cursor/mcp.json` in the project (`~/.cursor/mcp.json` for all projects):
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -85,10 +85,10 @@ Or `.cursor/mcp.json` in the project (`~/.cursor/mcp.json` for all projects):
 
 ### VS Code
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF)](https://vscode.dev/redirect/mcp/install?name=genclass&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40genclass%2Fmcp%400.2.2%22%5D%7D) or from a terminal:
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF)](https://vscode.dev/redirect/mcp/install?name=genclass&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40genclass%2Fmcp%400.2.3%22%5D%7D) or from a terminal:
 
 ```bash
-code --add-mcp '{"name":"genclass","command":"npx","args":["-y","@genclass/mcp@0.2.2"]}'
+code --add-mcp '{"name":"genclass","command":"npx","args":["-y","@genclass/mcp@0.2.3"]}'
 ```
 
 Or `.mcp.json` at the workspace root (the portable format; `.vscode/mcp.json` takes the same entry under `servers`):
@@ -100,7 +100,7 @@ Or `.mcp.json` at the workspace root (the portable format; `.vscode/mcp.json` ta
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -119,7 +119,7 @@ codex plugin add genclass@genclass
 Or the server alone:
 
 ```bash
-codex mcp add genclass -- npx -y @genclass/mcp@0.2.2
+codex mcp add genclass -- npx -y @genclass/mcp@0.2.3
 ```
 
 Or `~/.codex/config.toml` (`.codex/config.toml` in a trusted project). The first start downloads the package, so allow more than the default 10 seconds:
@@ -127,7 +127,7 @@ Or `~/.codex/config.toml` (`.codex/config.toml` in a trusted project). The first
 ```toml
 [mcp_servers.genclass]
 command = "npx"
-args = ["-y", "@genclass/mcp@0.2.2"]
+args = ["-y", "@genclass/mcp@0.2.3"]
 startup_timeout_sec = 30
 ```
 
@@ -142,7 +142,7 @@ gemini extensions install https://github.com/genclass-dev/genclass-plugin
 Or the server alone:
 
 ```bash
-gemini mcp add genclass npx -- -y @genclass/mcp@0.2.2   # -s user: for all projects
+gemini mcp add genclass npx -- -y @genclass/mcp@0.2.3   # -s user: for all projects
 ```
 
 Or `.gemini/settings.json` in the project (`~/.gemini/settings.json` for all projects):
@@ -154,7 +154,7 @@ Or `.gemini/settings.json` in the project (`~/.gemini/settings.json` for all pro
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -172,7 +172,7 @@ Or `.gemini/settings.json` in the project (`~/.gemini/settings.json` for all pro
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -182,13 +182,13 @@ Or `.gemini/settings.json` in the project (`~/.gemini/settings.json` for all pro
 Devin CLI and Devin Desktop's Devin Local agent:
 
 ```bash
-devin mcp add -s user genclass -- npx -y @genclass/mcp@0.2.2
+devin mcp add -s user genclass -- npx -y @genclass/mcp@0.2.3
 ```
 
 ### Cline
 
 ```bash
-cline mcp add genclass --yes -- npx -y @genclass/mcp@0.2.2
+cline mcp add genclass --yes -- npx -y @genclass/mcp@0.2.3
 ```
 
 Or MCP Servers, Configure, Configure MCP Servers (`~/.cline/data/settings/cline_mcp_settings.json`):
@@ -200,7 +200,7 @@ Or MCP Servers, Configure, Configure MCP Servers (`~/.cline/data/settings/cline_
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -209,7 +209,7 @@ Or MCP Servers, Configure, Configure MCP Servers (`~/.cline/data/settings/cline_
 
 ### Goose
 
-`goose://extension?cmd=npx&arg=-y&arg=%40genclass%2Fmcp%400.2.2&id=genclass&name=genclass&description=Find%20race%20conditions%20by%20reordering%20responses%2C%20replay%20one%2C%20prove%20the%20fix` (open it to install), or `goose configure` (Add Extension, Command-line Extension, command `npx -y @genclass/mcp@0.2.2`), or `~/.config/goose/config.yaml`:
+`goose://extension?cmd=npx&arg=-y&arg=%40genclass%2Fmcp%400.2.3&id=genclass&name=genclass&description=Find%20race%20conditions%20by%20reordering%20responses%2C%20replay%20one%2C%20prove%20the%20fix` (open it to install), or `goose configure` (Add Extension, Command-line Extension, command `npx -y @genclass/mcp@0.2.3`), or `~/.config/goose/config.yaml`:
 
 ```yaml
 extensions:
@@ -218,7 +218,7 @@ extensions:
     name: genclass
     enabled: true
     cmd: npx
-    args: ["-y", "@genclass/mcp@0.2.2"]
+    args: ["-y", "@genclass/mcp@0.2.3"]
     env_keys: []
     envs: {}
     timeout: 300
@@ -235,7 +235,7 @@ extensions:
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -253,7 +253,7 @@ AI Assistant: Settings, Tools, AI Assistant, Model Context Protocol (MCP), Add, 
       "command": "npx",
       "args": [
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ]
     }
   }
@@ -273,7 +273,7 @@ AI Assistant: Settings, Tools, AI Assistant, Model Context Protocol (MCP), Add, 
       "command": [
         "npx",
         "-y",
-        "@genclass/mcp@0.2.2"
+        "@genclass/mcp@0.2.3"
       ],
       "enabled": true
     }
@@ -283,7 +283,7 @@ AI Assistant: Settings, Tools, AI Assistant, Model Context Protocol (MCP), Add, 
 
 <!-- install:end -->
 
-Any other MCP client: a stdio server, command `npx`, arguments `-y @genclass/mcp@0.2.2`, no environment variables
+Any other MCP client: a stdio server, command `npx`, arguments `-y @genclass/mcp@0.2.3`, no environment variables
 required.
 
 ### The `genclass` skill
@@ -296,7 +296,7 @@ read a report, what to say when done, what to do when the tools are missing) is 
 [`plugin/skills/genclass/SKILL.md`](plugin/skills/genclass/SKILL.md). Three ways to get it:
 
 - the plugin installs it with the server and the hook;
-- `npx -y @genclass/mcp@0.2.2 init` writes it to `.claude/skills/genclass/SKILL.md` in the project (`--no-skill`
+- `npx -y @genclass/mcp@0.2.3 init` writes it to `.claude/skills/genclass/SKILL.md` in the project (`--no-skill`
   leaves it out). The written file carries a `genclass:init` marker line: a rerun replaces a file with the marker and
   leaves one without it (yours, or edited), and says which;
 - `npx skills add genclass-dev/genclass-plugin` (the skills CLI: Codex, Cursor, Copilot, Gemini CLI, Claude Code and
@@ -310,7 +310,7 @@ To remove it: delete `.claude/skills/genclass/` (or the directory the skill tool
 Then connect the app's development build (once). `init` does it for you: it runs the runtime CLI at the version it
 pins with `init --agent-link`, which shows the lines it adds after GenClass's import in your entry file and asks
 first (`--no-link` skips it). By hand: the agent link needs the newest runtime line, `@genclass/runtime`
-0.3.0-beta.1 or later: `npm install @genclass/runtime@0.3.0-beta.7`, the version this release was tested with (npm's
+0.3.0-beta.1 or later: `npm install @genclass/runtime@0.3.0-beta.8`, the version this release was tested with (npm's
 `latest` is the older 0.2.x, which has no agent entry):
 
 ```ts
@@ -367,7 +367,7 @@ both slow baselines show and it does not is named as what a slow response alone 
 | `genclass_replay` | `arm` / `result`: reproduce one finding exactly |
 | `genclass_analytics` | per-endpoint latency, error rates and request counts, learned relations and flows; production numbers from your GenClass dashboard |
 | `genclass_setup` | the lines to add for your framework, and the config lines for the client it runs in |
-| `genclass_scan` | `{url, phone?, hosted?}`: audit any page (the dev server or a site you do not own) with the 23 measured visual checks in headless Chromium: a score and each problem with its element, selector and a suggested CSS fix, plus the JSON report. Runs `npx @genclass/runtime@0.3.0-beta.7 scan --json --local` (or the project's own runtime); needs Playwright's Chromium (`npx playwright install chromium`), or `hosted: true` for the genclass.dev page check (public pages only, the URL is sent there); the agent asks before either |
+| `genclass_scan` | `{url, phone?, hosted?}`: audit any page (the dev server or a site you do not own) with the 23 measured visual checks in headless Chromium: a score and each problem with its element, selector and a suggested CSS fix, plus the JSON report. Runs `npx @genclass/runtime@0.3.0-beta.8 scan --json --local` (or the project's own runtime); needs Playwright's Chromium (`npx playwright install chromium`), or `hosted: true` for the genclass.dev page check (public pages only, the URL is sent there); the agent asks before either |
 | `genclass_clear` | forget recorded runs and findings |
 
 ## New findings without asking
@@ -375,7 +375,7 @@ both slow baselines show and it does not is named as what a slow response alone 
 - **Channels** (Claude Code research preview): start Claude Code with
   `claude --dangerously-load-development-channels server:genclass` and new findings arrive in the session as they
   happen (`notifications/claude/channel`).
-- **Prompt hook** (part of the Claude Code plugin): `npx -y @genclass/mcp@0.2.2 init --hook` adds a `UserPromptSubmit`
+- **Prompt hook** (part of the Claude Code plugin): `npx -y @genclass/mcp@0.2.3 init --hook` adds a `UserPromptSubmit`
   hook to `.claude/settings.json`; each prompt then carries the findings that changed since the last one.
 
 ## Environment
@@ -407,7 +407,7 @@ By default the server collects nothing and sends nothing to GenClass or anyone e
 `~/.genclass`. `genclass_analytics` `{source: "production"}` reads
 your own GenClass dashboard when you set `GENCLASS_DASHBOARD` to its private link. `genclass_scan` loads the page the
 agent names (that is the page's own traffic) in a local browser; only with `hosted: true` is the URL sent to the
-genclass.dev page check, and when the project has no `@genclass/runtime` with `scan`, npx downloads the version this release pins, `@genclass/runtime@0.3.0-beta.7`, from npm. With `GENCLASS_REPORT` set (off by
+genclass.dev page check, and when the project has no `@genclass/runtime` with `scan`, npx downloads the version this release pins, `@genclass/runtime@0.3.0-beta.8`, from npm. With `GENCLASS_REPORT` set (off by
 default) the server also mirrors its log of the loop to that dashboard, in small batches: the id, kind and page path of
 each finding, when its evidence was read, each replay armed and its verdict, when a regression test was written, each
 explore report (page loads compared, races found) and each clear, so the dashboard's Closed-loop development view

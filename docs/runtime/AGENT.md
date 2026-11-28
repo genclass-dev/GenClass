@@ -40,7 +40,7 @@ results are in section 7 and in [RESULTS.md](RESULTS.md) section 18.
 ## 1. Setup
 
 ```bash
-claude mcp add genclass -- npx -y @genclass/mcp@0.2.2   # or: npx -y @genclass/mcp@0.2.2 init  (writes .mcp.json and .claude/skills/genclass/SKILL.md)
+claude mcp add genclass -- npx -y @genclass/mcp@0.2.3   # or: npx -y @genclass/mcp@0.2.3 init  (writes .mcp.json and .claude/skills/genclass/SKILL.md)
 ```
 
 Or as a Claude Code plugin from this repository's marketplace (`.claude-plugin/marketplace.json`; the plugin is
@@ -52,7 +52,7 @@ the procedure (section 4.2) and does not need the plugin: `init` writes it into 
 `npx skills add genclass-dev/GenClass` installs the repository-root copy (`skills/genclass/SKILL.md`, kept
 identical to the plugin's by the version sync) through a skill directory. Other clients
 (Cursor, VS Code, Codex CLI, Gemini CLI, Windsurf, Cline, Goose, Zed, JetBrains, OpenCode): the install blocks in
-[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.2 config <client>`.
+[packages/mcp/README.md](../../packages/mcp/README.md#install), or `npx -y @genclass/mcp@0.2.3 config <client>`.
 Every launcher is pinned to the release. `packages/mcp/server.json` is the entry for the official MCP Registry
 (published by the release workflow with GitHub OIDC after the npm package); the listings for other directories are
 drafted in [docs/adoption/listings/mcp.md](../adoption/listings/mcp.md).
@@ -79,7 +79,7 @@ idempotent and returns that runtime here. `genclass_setup` prints this form, bec
 production, where `GenClass.init()` would run for every visitor and send anonymous diagnostics from public hosts by default.
 
 An app that already has GenClass gets the link written for it: `npx @genclass/runtime@beta init --agent-link`
-(`bin/lib/agent-link.mjs`; `npx -y @genclass/mcp@0.2.2 init` and the `genclass` command's coding agent step run it) puts
+(`bin/lib/agent-link.mjs`; `npx -y @genclass/mcp@0.2.3 init` and the `genclass` command's coding agent step run it) puts
 three lines right after the `/auto` import, or after a top-level `const rt = GenClass.init(...)`, with init's marker:
 `import { GenClass } from "@genclass/runtime"`, `import { connectAgent } from "@genclass/runtime/agent"` and
 `if (import.meta.env.DEV && GenClass.runtime) connectAgent(GenClass.runtime)` (Next.js and webpack:

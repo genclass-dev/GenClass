@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 (2026-11-26)
 
 - **`init` connects your app's development build too.** After `.mcp.json` and the skill, it runs the runtime CLI it
   pins, `npx -y @genclass/runtime@<that version> init --agent-link`, and says so first. That command shows the dev-only

@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.19
 
+- The first release on npm since 0.3.14: it also carries 0.3.15 to 0.3.18 below, which were never published
+  (the setup before Pro, `onboard`, the 7-day trial, no price written in the command).
 - **The coding agent step connects your running app too.** It used to write `.mcp.json` and the skill and then ask
   you to restart and add two lines by hand, so GenClass's MCP server said "No page has connected yet". It now adds the
   dev-only lines that connect the app's dev pages to the server, right after GenClass's import in your entry file,
