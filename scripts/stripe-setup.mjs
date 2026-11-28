@@ -4,7 +4,8 @@
 //   STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-setup.mjs     test mode first
 //   STRIPE_SECRET_KEY=sk_live_... node scripts/stripe-setup.mjs     then live
 //
-// The key is for GenClass's own Stripe account ("GenClass", in the Stripe organization "GenClass"). GenClass used to
+// The key is for GenClass's own Stripe account, "GenClass, Inc." (acct_1UbrVURxjlQiodf9, since 2026-11-28; before
+// that, "GenClass", acct_1UQIFDKdAcQCxrpH). GenClass used to
 // bill through a Stripe account shared with another business, and this script keeps the rules it had then: it creates,
 // finds and edits only GenClass's own objects, and never lists, changes, archives or deletes anything else
 // (telemetry-worker/README.md, "Stripe object ownership"):

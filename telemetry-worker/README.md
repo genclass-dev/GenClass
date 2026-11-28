@@ -652,8 +652,21 @@ trial of Pro; the tests keep that file as a fixture (`test/fixtures/plans-two-pa
 the code that only two paid plans or a locked dashboard reach (switches, duplicates, Managed Payments, the locked
 pages) stays tested. `test/plans.test.ts` checks the real file.
 
-GenClass bills through a Stripe account of its own, "GenClass" (Canada). The worker and the setup script touch only
+GenClass bills through a Stripe account of its own, "GenClass, Inc." (`acct_1UbrVURxjlQiodf9`, United States), since
+2026-11-28; before that through "GenClass" (`acct_1UQIFDKdAcQCxrpH`, Canada). The worker and the setup script touch only
 objects they can prove are GenClass's ("Stripe object ownership" below).
+
+**Moving to another Stripe account** (how the move to GenClass, Inc. was done): copy the customers in the old
+account's Dashboard (Customers, Copy customers; the new account accepts), which keeps customer ids and metadata, so
+`accounts.stripe_customer_id` still holds, and gives payment methods new ids. Only then run `scripts/stripe-setup.mjs`
+with the new key and put that key on the worker: a Checkout for a customer the key cannot find makes a fresh customer
+and resets the account to Free (`ensureCustomer`). Recreate each live subscription on the new account with the same
+price lookup key and metadata, the copied payment method, `billing_cycle_anchor` at the old period end and
+`proration_behavior: none`. Stripe then makes no first invoice, so the webhook takes the new subscription for an
+unpaid second one: point the row (`accounts.subscription_id`, or `projects.subscription_id` for a per-project one) at
+the new id where it still names the old one, then update the new subscription's metadata so
+`customer.subscription.updated` writes the row. Last, disable the old account's webhook endpoint and cancel the old
+subscriptions at once, with no proration and no final invoice.
 
 An account's plan is `accounts.plan`, written only by the Stripe webhook from the subscription as Stripe has it. A
 price names a plan only when it is provably GenClass's: a lookup key starting with `genclass_` and a product whose
@@ -1056,7 +1069,7 @@ new collector). Each step is the owner's, and the Stripe ones need a yes of thei
    the one the script finds and the worker can open. A Checkout Session with the worker's Team parameters (3 seats,
    adjustable) was accepted there too. The script reports all of it as unchanged and adds the webhook endpoint and
    the worker's settings.
-   In the live account (`acct_1UQIFDKdAcQCxrpH`) the same was made the same way on 2026-11-11, on the owner's yes:
+   In the live account of the time (`acct_1UQIFDKdAcQCxrpH`, billing until 2026-11-28) the same was made the same way on 2026-11-11, on the owner's yes:
    the product `genclass_team`, the price `price_1UaoDhKdAcQCxrpHINiYv5uX` and two portal configurations, of which
    `bpc_1UaoDyKdAcQCxrpH3NEpehi1` is the one that is not the default. The owner then ran the script with the
    live key: it reported the product and the price as unchanged, made the webhook endpoint
@@ -1087,7 +1100,7 @@ Individual, in order:
    `retired_plan_billing` notice also names one each time a payment of it clears). The worker keeps counting them as GenClass's, so their accounts can still cancel in Manage billing and a
    deleted account's subscription is cancelled.
 
-For GenClass's own Stripe account ("GenClass"), dashboard first, in test mode and then live (each setting below has a
+For GenClass's own Stripe account ("GenClass, Inc."), dashboard first, in test mode and then live (each setting below has a
 test-mode and a live copy unless the dashboard says it is shared):
 
 1. **Activate the account** (Settings, Business): business details, the bank account for payouts, the public business
